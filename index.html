@@ -174,9 +174,22 @@ function hostBoot(){
   G = load("gtb.state", null) || { phase:"edit", round:0, deadline:0, duration:20, title:"Guess the Baby!", code: rid(6), session: "s" + now() };
   rounds = load("gtb.rounds", []);
   votes = load("gtb.votes", {});           // pid -> {name, session, picks:{roundId:idx}}
+  // Only one host tab can run the game. A newly opened tab takes over and the older one steps aside.
+  try {
+    const bc = new BroadcastChannel("gtb-host"), me = rid(8);
+    bc.onmessage = e => { if (e.data && e.data.type === "takeover" && e.data.id !== me) retire(); };
+    bc.postMessage({ type:"takeover", id: me });
+  } catch {}
   connectHost();
   tickH = setInterval(hostTick, 250);
   render();
+}
+let retired = false;
+function retire(){
+  if (retired) return; retired = true;
+  clearInterval(tickH); try { peer.destroy(); } catch {}
+  notice("📺", "The game is open in another tab", "Only one tab can run the game. Use the other tab, or click below to run it here instead.",
+    `<button class="btn" style="margin-top:12px" onclick="location.reload()">Run the game in this tab</button>`);
 }
 function saveAll(){
   store("gtb.state", G); store("gtb.votes", votes);
@@ -185,9 +198,10 @@ function saveAll(){
 function setG(patch){ Object.assign(G, patch); saveAll(); render(); broadcast(); }
 
 function connectHost(){
+  if (retired) return;
   peer = new Peer(PREFIX + G.code, peerOpts);
   peer.on("open", () => { peerReady = true; render(); });
-  peer.on("disconnected", () => { peerReady = false; render(); setTimeout(() => { try { peer.reconnect(); } catch {} }, 1500); });
+  peer.on("disconnected", () => { if (retired) return; peerReady = false; render(); setTimeout(() => { try { peer.reconnect(); } catch {} }, 1500); });
   peer.on("error", e => {
     if (e.type === "unavailable-id"){ setTimeout(() => { try { peer.destroy(); } catch {} connectHost(); }, 3000); return; }
     if (["network","server-error","socket-error","socket-closed"].includes(e.type)){ peerReady = false; render(); }
@@ -256,7 +270,7 @@ function setBar(html){ bar.innerHTML = html; bar.hidden = false; }
 const statusDot = () => `<span class="netdot ${peerReady ? "on" : ""}" title="${peerReady ? "Online" : "Connecting…"}"></span>`;
 
 function render(){
-  if (!G) return;
+  if (!G || retired) return;
   ({ edit:renderEditor, lobby:renderLobby, voting:renderVoting, results:renderResults, final:renderFinal })[G.phase]();
 }
 
