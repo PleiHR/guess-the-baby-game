@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1d7a48">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍼</text></svg>">
+<title>Guess the Baby</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,800&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one stage that swaps scenes (editor · lobby · voting · results · leaderboard); host controls in a slim bottom bar; phone gets a single big-button column */
+:root{
+  --bg:#eef5ef; --surface:#ffffff; --ink:#15301f; --muted:#5b7364; --line:#d0e2d5;
+  --accent:#1d7a48; --accent-ink:#ffffff; --good:#0f8a5f; --bad:#c8455a;
+  --o1:#2f8f5b; --o2:#4a9630; --o3:#127a6e; --o4:#77901f; --o5:#3d6b4a; --o6:#2f9a7e;
+  --shadow:0 10px 30px rgba(20,80,40,.12);
+  --f-display:"Baloo 2","Trebuchet MS",system-ui,sans-serif;
+  --f-body:"Nunito Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1d15; --surface:#172a1f; --ink:#e8f4ec; --muted:#9fbaa8; --line:#2a4234;
+  --accent:#6fd39a; --accent-ink:#0f1d15; --good:#5fd39a; --bad:#ef7487;
+  --shadow:0 10px 30px rgba(0,0,0,.35); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1d15; --surface:#172a1f; --ink:#e8f4ec; --muted:#9fbaa8; --line:#2a4234;
+  --accent:#6fd39a; --accent-ink:#0f1d15; --good:#5fd39a; --bad:#ef7487;
+  --shadow:0 10px 30px rgba(0,0,0,.35); color-scheme:dark}
+html,body{height:100%}
+body{margin:0;padding-top:env(safe-area-inset-top,0px)}
+[hidden]{display:none!important}
+img{max-width:100%}
+.netdot{width:10px;height:10px;border-radius:50%;background:var(--bad);flex:none}
+.netdot.on{background:var(--good)}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5}
+*{box-sizing:border-box}
+#app{max-width:1200px;margin:0 auto;padding-inline:16px;padding-block:20px 110px;min-height:100%}
+h1,h2,h3{font-family:var(--f-display);line-height:1.05;margin:0;text-wrap:balance}
+.eyebrow{font-size:.78rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.muted{color:var(--muted)}
+button{font:inherit;cursor:pointer;border:0;border-radius:12px}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn{background:var(--accent);color:var(--accent-ink);font-weight:800;padding:.7em 1.2em}
+.btn.ghost{background:transparent;color:var(--ink);border:2px solid var(--line)}
+.btn.small{padding:.45em .8em;font-size:.9rem}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+input[type=text],input[type=number],input[type=url]{font:inherit;color:var(--ink);background:var(--surface);border:2px solid var(--line);border-radius:10px;padding:.5em .7em;width:100%;min-width:0}
+.center{display:grid;place-items:center;text-align:center;gap:16px;min-height:60vh}
+
+/* bottom host bar */
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;z-index:5}
+.bar .grow{flex:1;min-width:120px;color:var(--muted);font-size:.9rem}
+
+/* editor */
+.ed-head{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:end;margin-bottom:24px}
+.settings{display:grid;grid-template-columns:2fr 1fr 2fr;gap:12px;margin-bottom:24px;background:var(--surface);padding:16px;border-radius:16px;border:1px solid var(--line)}
+.settings label{display:grid;gap:4px;font-size:.85rem;font-weight:700;color:var(--muted);min-width:0}
+.rounds{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.rcard{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;display:grid;gap:10px;min-width:0}
+.rcard .top{display:flex;justify-content:space-between;align-items:center}
+.photo{aspect-ratio:1/1;max-width:100%;border-radius:14px;background:var(--bg);border:2px dashed var(--line);display:grid;place-items:center;overflow:hidden;position:relative;cursor:pointer}
+.photo img{width:100%;height:100%;object-fit:cover}
+.photo span{color:var(--muted);font-weight:700;padding:16px;text-align:center}
+.opt-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center}
+.opt-row input[type=radio]{width:20px;height:20px;accent-color:var(--good)}
+.x{background:transparent;color:var(--muted);font-size:1.2rem;padding:0 .3em}
+.add{min-height:200px;border:2px dashed var(--line);background:transparent;color:var(--muted);font-weight:800;font-size:1.1rem;border-radius:18px}
+.hint{font-size:.82rem;color:var(--muted)}
+
+/* lobby */
+.lobby{display:grid;grid-template-columns:auto 1fr;gap:40px;align-items:center;min-height:70vh}
+.qrbox{background:#fff;padding:18px;border-radius:22px;box-shadow:var(--shadow)}
+.qrbox img,.qrbox canvas{display:block}
+.big{font-size:clamp(2.4rem,6vw,4.6rem);font-weight:800}
+.link{font-family:var(--f-mono);font-size:.85rem;word-break:break-all;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 12px 4px 4px;font-weight:700;font-size:.9rem}
+.chip img{width:24px;height:24px;border-radius:50%}
+
+/* stage (voting / results) */
+.stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:32px;align-items:center;min-height:70vh}
+.baby{aspect-ratio:1/1;max-width:100%;border-radius:28px;overflow:hidden;box-shadow:var(--shadow);background:var(--surface)}
+.baby img{width:100%;height:100%;object-fit:cover}
+.stage-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px}
+.clock{font-family:var(--f-display);font-weight:800;font-size:3.4rem;line-height:1;font-variant-numeric:tabular-nums;color:var(--accent)}
+.clock.low{color:var(--bad)}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.opt{display:flex;align-items:center;gap:12px;padding:16px;border-radius:16px;color:#fff;font-weight:800;font-size:1.3rem;min-height:76px;text-align:left}
+.letter{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.25);font-family:var(--f-display);flex:none}
+.c0{background:var(--o1)}.c1{background:var(--o2)}.c2{background:var(--o3)}.c3{background:var(--o4)}.c4{background:var(--o5)}.c5{background:var(--o6)}
+.progress{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:18px}
+.progress i{display:block;height:100%;background:var(--accent);transition:width .25s linear}
+
+.bars{display:grid;gap:12px}
+.barrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center}
+.barrow .name{font-weight:800;font-size:1.2rem;display:flex;align-items:center;gap:10px;min-width:0}
+.barrow .n{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--muted)}
+.track{grid-column:1/-1;height:26px;border-radius:10px;background:var(--line);overflow:hidden}
+.fill{height:100%;border-radius:10px;width:0;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.barrow.lose{opacity:.5}
+.tag{background:var(--good);color:#fff;font-size:.75rem;padding:2px 8px;border-radius:99px;letter-spacing:.06em;text-transform:uppercase}
+.reveal{font-size:clamp(1.6rem,3.6vw,2.6rem);font-weight:800}
+.reveal b{color:var(--good)}
+
+.board{display:grid;gap:10px;max-width:640px;margin:24px auto 0}
+.brow{display:grid;grid-template-columns:44px 40px 1fr auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 14px}
+.brow .pos{font-family:var(--f-display);font-weight:800;font-size:1.5rem;color:var(--muted);text-align:center}
+.brow.p1{border-color:var(--o3);box-shadow:var(--shadow)} .brow.p1 .pos{color:var(--o3)}
+.brow img{width:40px;height:40px;border-radius:50%}
+.brow .pts{font-family:var(--f-mono);font-weight:500;font-variant-numeric:tabular-nums}
+
+/* phone */
+.phone{max-width:460px;margin:0 auto;display:grid;gap:16px}
+.phone .baby{border-radius:20px;aspect-ratio:auto;display:grid;place-items:center}
+.phone .baby img{width:auto;height:auto;max-width:100%;max-height:48vh;object-fit:contain;display:block}
+.phone .opts{grid-template-columns:1fr}
+.opt.picked{outline:4px solid var(--ink);outline-offset:3px}
+.opt.dim{opacity:.4}
+.pclock{display:flex;justify-content:space-between;align-items:center;font-weight:800}
+.notice{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;text-align:center}
+.emoji{font-size:3rem;line-height:1}
+
+@media (max-width:820px){
+  .lobby,.stage{grid-template-columns:1fr;gap:20px}
+  .settings{grid-template-columns:1fr}
+  .ed-head{grid-template-columns:1fr}
+  .opts{grid-template-columns:1fr}
+  .clock{font-size:2.6rem}
+}
+@media (prefers-reduced-motion:reduce){.fill,.progress i{transition:none}}
+</style>
+
+</head>
+<body>
+<div id="app"><div class="center"><div><p class="eyebrow">Loading</p><h1>Guess the Baby</h1></div></div></div>
+<div id="bar" class="bar" hidden></div>
+<input id="file" type="file" accept="image/*" hidden>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+/* Guess the Baby — standalone version.
+   The host's browser holds the game and acts as the server; phones connect to it peer-to-peer (PeerJS).
+   Host:   https://<site>/            (editor, lobby with QR, voting, results, leaderboard)
+   Player: https://<site>/?g=CODE     (name, vote buttons, own result) */
+
+const LETTERS = "ABCDEF";
+const PREFIX = "plei-guess-the-baby-";
+const app = document.getElementById("app"), bar = document.getElementById("bar"), fileInput = document.getElementById("file");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const now = () => Date.now();
+const rid = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31]).join("");
+const load = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
+const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
+
+function toast(msg){
+  let t = document.getElementById("toast");
+  if (!t){ t = document.createElement("div"); t.id = "toast"; t.setAttribute("role","status");
+    t.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:90px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:700;z-index:9;max-width:calc(100% - 32px)";
+    document.body.appendChild(t); }
+  t.textContent = msg; t.hidden = false; clearTimeout(t._h); t._h = setTimeout(() => t.hidden = true, 3500);
+}
+function notice(emoji, title, body, extra = ""){
+  bar.hidden = true;
+  app.innerHTML = `<div class="center"><div class="notice phone"><div class="emoji">${emoji}</div><h2 style="margin:8px 0">${esc(title)}</h2><p class="muted">${esc(body)}</p>${extra}</div></div>`;
+}
+const peerOpts = { debug: 0, config: { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] } };
+
+const code = new URLSearchParams(location.search).get("g");
+if (!window.Peer) notice("⚠️", "Couldn't load the game", "Check your internet connection and reload the page.");
+else if (code) playerBoot(code.toLowerCase());
+else hostBoot();
+
+/* ================================================================== HOST */
+let G, rounds, votes, peer, conns = new Map(), tickH, editorKey = "", sceneKey = "", uploadTarget = null, peerReady = false;
+
+function hostBoot(){
+  G = load("gtb.state", null) || { phase:"edit", round:0, deadline:0, duration:20, title:"Guess the Baby!", code: rid(6), session: "s" + now() };
+  rounds = load("gtb.rounds", []);
+  votes = load("gtb.votes", {});           // pid -> {name, session, picks:{roundId:idx}}
+  connectHost();
+  tickH = setInterval(hostTick, 250);
+  render();
+}
+function saveAll(){
+  store("gtb.state", G); store("gtb.votes", votes);
+  if (!store("gtb.rounds", rounds)) toast("Your browser storage is full. Use smaller photos or fewer rounds.");
+}
+function setG(patch){ Object.assign(G, patch); saveAll(); render(); broadcast(); }
+
+function connectHost(){
+  peer = new Peer(PREFIX + G.code, peerOpts);
+  peer.on("open", () => { peerReady = true; render(); });
+  peer.on("disconnected", () => { peerReady = false; render(); setTimeout(() => { try { peer.reconnect(); } catch {} }, 1500); });
+  peer.on("error", e => {
+    if (e.type === "unavailable-id"){ setTimeout(() => { try { peer.destroy(); } catch {} connectHost(); }, 3000); return; }
+    if (["network","server-error","socket-error","socket-closed"].includes(e.type)){ peerReady = false; render(); }
+  });
+  peer.on("connection", conn => {
+    conn.on("data", msg => onPlayerMsg(conn, msg));
+    conn.on("close", () => { for (const [pid, c] of conns) if (c === conn) conns.delete(pid); render(); });
+  });
+}
+
+function onPlayerMsg(conn, msg){
+  if (!msg || typeof msg !== "object") return;
+  const pid = String(msg.pid || "").slice(0, 40); if (!pid) return;
+  if (msg.type === "hello"){
+    conns.set(pid, conn);
+    const v = votes[pid];
+    if (v && v.session === G.session) send(pid);           // reconnecting player
+    else conn.send({ type:"state", needName:true, title:G.title, lastName: v?.name || "" });
+    render();
+  }
+  if (msg.type === "join"){
+    const name = String(msg.name || "").trim().slice(0, 30); if (!name) return;
+    conns.set(pid, conn);
+    votes[pid] = { name, session:G.session, picks: votes[pid]?.session === G.session ? votes[pid].picks : {} };
+    saveAll(); send(pid); render();
+  }
+  if (msg.type === "vote"){
+    const v = votes[pid], r = rounds[G.round];
+    if (!v || v.session !== G.session || !r || r.id !== msg.roundId) return;
+    if (G.phase !== "voting" || now() > G.deadline + 500) return;
+    const j = +msg.pick; if (!(j >= 0 && j < r.options.length)) return;
+    v.picks[r.id] = j; store("gtb.votes", votes); send(pid); render();
+  }
+}
+
+function payloadFor(pid){
+  const v = votes[pid], r = rounds[G.round];
+  const base = { type:"state", title:G.title, phase:G.phase, round:G.round, total:rounds.length, name:v?.name };
+  if (G.phase === "voting" || G.phase === "results") Object.assign(base, {
+    roundId:r.id, img:r.img, options:r.options, endsIn: Math.max(0, G.deadline - now()),
+    pick: v?.picks?.[r.id] ?? null, answer: G.phase === "results" ? r.answer : null });
+  if (G.phase === "final") base.pts = score(v);
+  return base;
+}
+const imgSent = new Map();  // pid -> roundId whose image the phone already has
+function send(pid){
+  const c = conns.get(pid); if (!c || !c.open) return;
+  const p = payloadFor(pid);
+  if (p.roundId && imgSent.get(pid) === p.roundId + c.connectionId) delete p.img; else if (p.img) imgSent.set(pid, p.roundId + c.connectionId);
+  try { c.send(p); } catch {}
+}
+function broadcast(){ for (const pid of conns.keys()) if (votes[pid]?.session === G.session) send(pid); }
+
+function hostTick(){
+  if (G.phase !== "voting") return;
+  const left = Math.max(0, G.deadline - now());
+  document.querySelectorAll("[data-clock]").forEach(el => { el.textContent = Math.ceil(left/1000); el.classList.toggle("low", left < 5000); });
+  document.querySelectorAll("[data-prog]").forEach(el => el.style.width = (100 * left / (G.duration*1000)) + "%");
+  if (left === 0) setG({ phase:"results" });
+}
+
+const players = () => Object.entries(votes).filter(([,v]) => v.session === G.session);
+const score = v => v ? rounds.reduce((s,r) => s + (r.answer != null && v.picks?.[r.id] === r.answer ? 1 : 0), 0) : 0;
+const joinUrl = () => location.origin + location.pathname + "?g=" + G.code;
+function setBar(html){ bar.innerHTML = html; bar.hidden = false; }
+const statusDot = () => `<span class="netdot ${peerReady ? "on" : ""}" title="${peerReady ? "Online" : "Connecting…"}"></span>`;
+
+function render(){
+  if (!G) return;
+  ({ edit:renderEditor, lobby:renderLobby, voting:renderVoting, results:renderResults, final:renderFinal })[G.phase]();
+}
+
+function renderEditor(){
+  sceneKey = "";
+  const ready = rounds.length && rounds.every(r => r.img && r.answer != null && r.options.filter(o => o.trim()).length >= 2 && r.options.every(o => o.trim()));
+  setBar(`${statusDot()}<span class="grow">${rounds.length} photo${rounds.length===1?"":"s"} · ${ready ? "Ready to play" : "Each photo needs an image, names in every box and the correct answer selected"}</span>
+    <button class="btn" id="go" ${ready ? "" : "disabled"}>Open lobby with QR →</button>`);
+  bar.querySelector("#go").onclick = () => setG({ phase:"lobby", round:0, session:"s" + now() });
+  const key = rounds.map(r => r.id + ":" + (r.img||"").length + ":" + r.options.length + ":" + r.answer).join(",");
+  if (key === editorKey && app.querySelector(".rounds")) return;
+  editorKey = key;
+  app.innerHTML = `
+    <div class="ed-head"><div><p class="eyebrow">Editor · only you can see this</p><h1 class="big" style="font-size:clamp(2rem,5vw,3.4rem)">Build the game</h1>
+      <p class="muted">Upload each baby photo, add 2 to 6 names to vote on, and tick the circle next to the right one. Everything is saved in this browser, so run the game from this same computer.</p></div></div>
+    <div class="settings">
+      <label for="s-title">Title on screen<input type="text" id="s-title" value="${esc(G.title)}"></label>
+      <label for="s-dur">Seconds to vote<input type="number" id="s-dur" min="5" max="120" value="${G.duration}"></label>
+    </div>
+    <div class="rounds">${rounds.map((r,i) => roundCard(r,i)).join("")}<button class="add" id="add">+ Add photo</button></div>`;
+  app.querySelector("#s-title").onchange = e => setG({ title:e.target.value.trim() || "Guess the Baby!" });
+  app.querySelector("#s-dur").onchange = e => setG({ duration: Math.min(120, Math.max(5, +e.target.value || 20)) });
+  app.querySelector("#add").onclick = () => { rounds.push({ id:"r" + rid(8), img:"", options:["","","",""], answer:null }); saveAll(); render(); };
+  rounds.forEach(wireRound);
+}
+
+function roundCard(r, i){
+  const opts = r.options;
+  return `<div class="rcard" data-r="${r.id}">
+    <div class="top"><span class="eyebrow">Photo ${i+1}</span>
+      <span><button class="x" data-move="-1" title="Move up" ${i===0?"disabled":""}>↑</button><button class="x" data-move="1" title="Move down" ${i===rounds.length-1?"disabled":""}>↓</button><button class="x" data-del title="Delete photo">✕</button></span></div>
+    <div class="photo" data-pick>${r.img ? `<img src="${r.img}" alt="Baby photo ${i+1}">` : `<span>Tap to upload a photo</span>`}</div>
+    ${opts.map((o,j) => `<div class="opt-row">
+        <input type="radio" name="ans-${r.id}" id="a-${r.id}-${j}" ${r.answer===j?"checked":""} data-ans="${j}" aria-label="Correct answer">
+        <input type="text" id="o-${r.id}-${j}" value="${esc(o)}" placeholder="Name ${LETTERS[j]}" data-opt="${j}">
+        <button class="x" data-rm="${j}" title="Remove" ${opts.length<=2?"disabled":""}>−</button></div>`).join("")}
+    ${opts.length < 6 ? `<button class="btn ghost small" data-addopt>+ Add name</button>` : ""}
+    <p class="hint">${r.answer==null ? "Tick the circle next to the correct answer." : "✓ Correct: " + esc(opts[r.answer] || "—")}</p></div>`;
+}
+
+function wireRound(r){
+  const el = app.querySelector(`[data-r="${r.id}"]`); if (!el) return;
+  const done = () => { saveAll(); render(); };
+  el.querySelector("[data-pick]").onclick = () => { uploadTarget = r; fileInput.value = ""; fileInput.click(); };
+  el.querySelectorAll("[data-opt]").forEach(inp => inp.oninput = () => { r.options[+inp.dataset.opt] = inp.value; saveAll(); renderEditorBarOnly(); });
+  el.querySelectorAll("[data-ans]").forEach(inp => inp.onchange = () => { r.answer = +inp.dataset.ans; done(); });
+  el.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => {
+    const j = +b.dataset.rm; r.options.splice(j, 1);
+    if (r.answer === j) r.answer = null; else if (r.answer > j) r.answer--;
+    done();
+  });
+  const ao = el.querySelector("[data-addopt]"); if (ao) ao.onclick = () => { r.options.push(""); done(); };
+  el.querySelector("[data-del]").onclick = e => {
+    if (el.dataset.confirm !== "1"){ el.dataset.confirm = "1"; e.target.textContent = "Delete?"; setTimeout(() => { el.dataset.confirm = ""; e.target.textContent = "✕"; }, 2500); return; }
+    rounds = rounds.filter(x => x !== r); done();
+  };
+  el.querySelectorAll("[data-move]").forEach(b => b.onclick = () => {
+    const i = rounds.indexOf(r), j = i + (+b.dataset.move); if (!rounds[j]) return;
+    [rounds[i], rounds[j]] = [rounds[j], rounds[i]]; done();
+  });
+}
+function renderEditorBarOnly(){
+  const ready = rounds.length && rounds.every(r => r.img && r.answer != null && r.options.every(o => o.trim()));
+  const go = bar.querySelector("#go"); if (go) go.disabled = !ready;
+  const g = bar.querySelector(".grow"); if (g) g.textContent = `${rounds.length} photo${rounds.length===1?"":"s"} · ${ready ? "Ready to play" : "Each photo needs an image, names in every box and the correct answer selected"}`;
+}
+
+fileInput.onchange = async () => {
+  const f = fileInput.files[0], r = uploadTarget; if (!f || !r) return;
+  try {
+    const img = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = fr.result; }; fr.onerror = rej; fr.readAsDataURL(f); });
+    let size = 720, q = 0.8, url;
+    do {
+      const c = document.createElement("canvas"), s = Math.min(1, size / Math.max(img.width, img.height));
+      c.width = Math.round(img.width*s); c.height = Math.round(img.height*s);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      url = c.toDataURL("image/jpeg", q); size *= .85; q = Math.max(.55, q - .07);
+    } while (url.length > 160000 && size > 200);
+    r.img = url; saveAll(); render();
+  } catch { toast("Couldn't load that image. Try a JPG or PNG."); }
+};
+
+let qrDone = "";
+function renderLobby(){
+  const ps = players();
+  setBar(`${statusDot()}<button class="btn ghost" id="back">← Edit</button><span class="grow">${ps.length} player${ps.length===1?"":"s"} joined</span><button class="btn" id="start">Start · Photo 1 →</button>`);
+  bar.querySelector("#back").onclick = () => setG({ phase:"edit" });
+  bar.querySelector("#start").onclick = () => startRound(0);
+  if (!app.querySelector(".lobby")){
+    qrDone = "";
+    app.innerHTML = `<div class="lobby">
+      <div class="qrbox"><div id="qr"></div></div>
+      <div style="display:grid;gap:16px;min-width:0">
+        <p class="eyebrow">All Hands · ${rounds.length} photos</p>
+        <h1 class="big">${esc(G.title)}</h1>
+        <p style="font-size:1.25rem">Scan the QR code with your phone to play.</p>
+        <div class="chips" id="chips"></div></div></div>`;
+  }
+  if (qrDone !== joinUrl()){ const box = app.querySelector("#qr"); box.innerHTML = ""; new QRCode(box, { text:joinUrl(), width:300, height:300, colorDark:"#15301f", colorLight:"#ffffff", correctLevel:QRCode.CorrectLevel.M }); qrDone = joinUrl(); }
+  app.querySelector("#chips").innerHTML = ps.map(([,v]) => `<span class="chip">${esc(v.name)}</span>`).join("") || `<span class="muted">Waiting for players…</span>`;
+}
+
+function startRound(i){ setG({ phase:"voting", round:i, deadline: now() + G.duration*1000 }); }
+function tally(r){ const c = r.options.map(() => 0); players().forEach(([,v]) => { const p = v.picks?.[r.id]; if (p != null && c[p] != null) c[p]++; }); return c; }
+
+function renderVoting(){
+  const r = rounds[G.round]; if (!r) return;
+  const n = tally(r).reduce((a,b) => a+b, 0), total = players().length;
+  setBar(`${statusDot()}<span class="grow">Photo ${G.round+1} of ${rounds.length} · ${n} of ${total} voted</span><button class="btn" id="close">Close voting</button>`);
+  bar.querySelector("#close").onclick = () => setG({ phase:"results", deadline: now() });
+  const k = "vote|" + r.id + "|" + G.deadline;
+  if (k === sceneKey){ const c = app.querySelector("[data-count]"); if (c) c.textContent = `${n} ${n===1?"vote":"votes"}`; return; }
+  sceneKey = k;
+  app.innerHTML = `<div class="stage">
+    <div class="baby"><img src="${r.img}" alt="Baby photo"></div>
+    <div style="min-width:0">
+      <div class="stage-head"><div><p class="eyebrow">Photo ${G.round+1} of ${rounds.length}</p><h2 style="font-size:clamp(2rem,4vw,3rem)">Who is it?</h2></div>
+        <div style="text-align:right"><div class="clock" data-clock>${G.duration}</div><div class="muted" data-count>${n} ${n===1?"vote":"votes"}</div></div></div>
+      <div class="opts">${r.options.map((o,j) => `<div class="opt c${j}"><span class="letter">${LETTERS[j]}</span>${esc(o)}</div>`).join("")}</div>
+      <div class="progress"><i data-prog style="width:100%"></i></div></div></div>`;
+  hostTick();
+}
+
+function renderResults(){
+  const r = rounds[G.round]; if (!r) return;
+  const last = G.round >= rounds.length - 1;
+  setBar(`${statusDot()}<span class="grow">Photo ${G.round+1} of ${rounds.length}</span><button class="btn ghost" id="again">Redo voting</button>
+    ${last ? `<button class="btn" id="fin">See final leaderboard →</button>` : `<button class="btn" id="next">Next photo →</button>`}`);
+  bar.querySelector("#again").onclick = () => { players().forEach(([,v]) => delete v.picks[r.id]); startRound(G.round); };
+  if (last) bar.querySelector("#fin").onclick = () => setG({ phase:"final" }); else bar.querySelector("#next").onclick = () => startRound(G.round + 1);
+  const counts = tally(r), total = counts.reduce((a,b) => a+b, 0), max = Math.max(1, ...counts);
+  const k = "res|" + r.id + "|" + counts.join(",");
+  if (k === sceneKey) return;
+  const first = !sceneKey.startsWith("res|" + r.id); sceneKey = k;
+  const right = counts[r.answer] || 0;
+  app.innerHTML = `<div class="stage">
+    <div class="baby"><img src="${r.img}" alt="Baby photo"></div>
+    <div style="min-width:0;display:grid;gap:20px">
+      <div><p class="eyebrow">Results · ${total} ${total===1?"vote":"votes"}</p><p class="reveal">It was <b>${esc(r.options[r.answer])}</b>!</p>
+      <p class="muted">${total ? `${right} of ${total} got it right (${Math.round(100*right/total)}%)` : "Nobody voted this round."}</p></div>
+      <div class="bars">${r.options.map((o,j) => `<div class="barrow ${j===r.answer?"":"lose"}">
+        <div class="name"><span class="letter c${j}" style="color:#fff">${LETTERS[j]}</span>${esc(o)} ${j===r.answer?`<span class="tag">Correct</span>`:""}</div>
+        <span class="n">${counts[j]}</span><div class="track"><div class="fill c${j}" data-w="${100*counts[j]/max}"></div></div></div>`).join("")}</div></div></div>`;
+  const fills = app.querySelectorAll(".fill"), apply = () => fills.forEach(f => f.style.width = f.dataset.w + "%");
+  first ? requestAnimationFrame(() => requestAnimationFrame(apply)) : (fills.forEach(f => f.style.transition = "none"), apply());
+}
+
+function renderFinal(){
+  setBar(`${statusDot()}<button class="btn ghost" id="edit">Back to editor</button><span class="grow"></span><button class="btn" id="restart">Play again</button>`);
+  bar.querySelector("#edit").onclick = () => setG({ phase:"edit" });
+  bar.querySelector("#restart").onclick = () => setG({ phase:"lobby", round:0, session:"s" + now() });
+  const sc = players().map(([pid,v]) => ({ pid, name:v.name, pts:score(v) })).sort((a,b) => b.pts - a.pts).slice(0, 10);
+  const k = "final|" + sc.map(s => s.pid + s.pts).join(","); if (k === sceneKey) return; sceneKey = k;
+  let pos = 0, prev = null;
+  app.innerHTML = `<div style="text-align:center"><p class="eyebrow">Final leaderboard · ${rounds.length} photos</p><h1 class="big">Top baby detectives!</h1></div>
+    <div class="board">${sc.map((s,i) => { if (s.pts !== prev){ pos = i+1; prev = s.pts; }
+      return `<div class="brow ${pos===1?"p1":""}"><span class="pos">${pos}</span><strong>${esc(s.name)}</strong><span class="pts">${s.pts}/${rounds.length}</span></div>`; }).join("")
+      || `<p class="muted" style="text-align:center">No votes yet.</p>`}</div>`;
+}
+
+/* ================================================================== PLAYER */
+let P = null, pconn = null, ppeer = null, pid, localDeadline = 0, lastImg = { id:null, img:null }, ptick, retryH, sending = false;
+
+function playerBoot(c){
+  pid = load("gtb.pid", null) || ("p" + rid(12)); store("gtb.pid", pid);
+  notice("🍼", "Connecting to the game…", "One second.");
+  ppeer = new Peer(peerOpts);
+  ppeer.on("open", () => dial(c));
+  ppeer.on("disconnected", () => setTimeout(() => { try { ppeer.reconnect(); } catch {} }, 1500));
+  ppeer.on("error", e => {
+    if (e.type === "peer-unavailable"){ if (!P) notice("⏳", "The game isn't open yet", "Wait for the host to open the lobby, then scan the QR again or tap below.", `<button class="btn" style="margin-top:12px" onclick="location.reload()">Try again</button>`); scheduleRetry(c); }
+    else if (["network","server-error","socket-error","socket-closed"].includes(e.type)) scheduleRetry(c);
+  });
+  ptick = setInterval(playerTick, 250);
+}
+function scheduleRetry(c){ clearTimeout(retryH); retryH = setTimeout(() => dial(c), 3000); }
+function dial(c){
+  if (pconn && pconn.open) return;
+  try { pconn = ppeer.connect(PREFIX + c, { reliable:true }); } catch { return scheduleRetry(c); }
+  pconn.on("open", () => pconn.send({ type:"hello", pid }));
+  pconn.on("data", onHostMsg);
+  pconn.on("close", () => { if (P) toast("Reconnecting…"); scheduleRetry(c); });
+  pconn.on("error", () => scheduleRetry(c));
+}
+function onHostMsg(m){
+  if (!m || m.type !== "state") return;
+  if (m.img) lastImg = { id:m.roundId, img:m.img };
+  if (m.endsIn != null) localDeadline = now() + m.endsIn;
+  const scene = m.needName ? "name" : m.phase + "|" + m.roundId + "|" + m.pick + "|" + m.answer;
+  const prevScene = P?._scene; P = { ...m, _scene: scene };
+  if (scene !== prevScene) renderPlayer();
+}
+function playerTick(){
+  if (!P || P.phase !== "voting") return;
+  const left = Math.max(0, localDeadline - now());
+  document.querySelectorAll("[data-clock]").forEach(el => { el.textContent = Math.ceil(left/1000); el.classList.toggle("low", left < 5000); });
+  if (left === 0 && !document.querySelector("[data-locked]")) renderPlayer();
+}
+
+function renderPlayer(){
+  bar.hidden = true;
+  if (P.needName){
+    if (app.querySelector("#pname")) return;
+    app.innerHTML = `<div class="phone center"><form id="joinform" style="display:grid;gap:16px;width:100%">
+      <div class="emoji">🍼</div><p class="eyebrow">All Hands</p><h1 class="big" style="font-size:2.6rem">${esc(P.title)}</h1>
+      <p class="muted">You'll see baby photos of your teammates. Pick who you think it is before time runs out.</p>
+      <label for="pname" style="display:grid;gap:6px;text-align:left;font-weight:800">Your name
+        <input type="text" id="pname" maxlength="30" autocomplete="name" placeholder="e.g. Alex R." value="${esc(P.lastName || "")}" style="font-size:1.15rem;padding:.7em .8em"></label>
+      <button class="btn" id="join" type="submit" style="font-size:1.2rem;padding:.9em" ${P.lastName ? "" : "disabled"}>Join the game</button></form></div>`;
+    const inp = app.querySelector("#pname"), btn = app.querySelector("#join");
+    inp.oninput = () => btn.disabled = !inp.value.trim();
+    app.querySelector("#joinform").onsubmit = e => { e.preventDefault(); const n = inp.value.trim().slice(0,30); if (!n) return;
+      btn.disabled = true; btn.textContent = "Joining…"; try { pconn.send({ type:"join", pid, name:n }); } catch { toast("Couldn't connect. Try again."); btn.disabled = false; btn.textContent = "Join the game"; } };
+    return;
+  }
+  const p = P.phase;
+  if (p === "edit" || p === "lobby") return notice("✅", `You're in, ${P.name}!`, "Watch the shared screen. When the first photo appears, you can vote here.");
+  if (p === "final") return notice("🏆", `You got ${P.pts} of ${P.total} right`, "Check the leaderboard on the shared screen.");
+  const img = lastImg.id === P.roundId ? lastImg.img : "";
+  const shell = inner => app.innerHTML = `<div class="phone"><p class="eyebrow" style="text-align:center">Photo ${P.round+1} of ${P.total}</p>
+    <div class="baby">${img ? `<img src="${img}" alt="Baby photo">` : ""}</div>${inner}</div>`;
+  if (p === "results"){
+    const ok = P.pick === P.answer;
+    return shell(`<div class="notice" data-locked><div class="emoji">${P.pick==null ? "⏰" : ok ? "🎉" : "🙃"}</div>
+      <h2 style="margin:6px 0">${P.pick==null ? "You didn't vote in time" : ok ? "You got it!" : "Not this time"}</h2>
+      <p class="muted">It was <strong>${esc(P.options[P.answer])}</strong>.</p></div>`);
+  }
+  const open = now() < localDeadline, pick = P.pick;
+  shell(`<div class="pclock"><span>${open ? (pick==null ? "Pick an answer" : "You can change your vote") : "Time's up"}</span><span class="clock" data-clock style="font-size:2rem">${Math.ceil(Math.max(0,localDeadline-now())/1000)}</span></div>
+    <div class="opts" ${open ? "" : "data-locked"}>${P.options.map((o,j) => `<button class="opt c${j} ${pick===j?"picked":""} ${pick!=null&&pick!==j?"dim":""}" data-v="${j}" ${open?"":"disabled"}><span class="letter">${LETTERS[j]}</span>${esc(o)}</button>`).join("")}</div>`);
+  app.querySelectorAll("[data-v]").forEach(b => b.onclick = () => {
+    if (now() >= localDeadline) return;
+    try { pconn.send({ type:"vote", pid, roundId:P.roundId, pick:+b.dataset.v }); } catch { toast("Your vote wasn't sent. Tap again."); }
+    app.querySelectorAll("[data-v]").forEach(x => { x.classList.toggle("picked", x === b); x.classList.toggle("dim", x !== b); });
+  });
+}
+
+</script>
+</body>
+</html>
