@@ -166,10 +166,6 @@ function notice(emoji, title, body, extra = ""){
 }
 const peerOpts = { debug: 0, config: { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] } };
 
-const code = new URLSearchParams(location.search).get("g");
-if (!window.Peer) notice("⚠️", "Couldn't load the game", "Check your internet connection and reload the page.");
-else if (code) playerBoot(code.toLowerCase());
-else hostBoot();
 
 /* ================================================================== HOST */
 let G, rounds, votes, peer, conns = new Map(), tickH, editorKey = "", sceneKey = "", uploadTarget = null, peerReady = false;
@@ -498,6 +494,11 @@ function renderPlayer(){
   });
 }
 
+/* ================================================================== START */
+const code = new URLSearchParams(location.search).get("g");
+if (!window.Peer) notice("⚠️", "Couldn't load the game", "Check your internet connection and reload the page.");
+else if (code) playerBoot(code.toLowerCase());
+else hostBoot();
 </script>
 </body>
 </html>
