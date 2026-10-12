@@ -104,7 +104,7 @@ input[type=text],input[type=number],input[type=url]{font:inherit;color:var(--ink
 .reveal b{color:var(--good)}
 
 .board{display:grid;gap:10px;max-width:640px;margin:24px auto 0}
-.brow{display:grid;grid-template-columns:44px 40px 1fr auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 14px}
+.brow{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 14px}
 .brow .pos{font-family:var(--f-display);font-weight:800;font-size:1.5rem;color:var(--muted);text-align:center}
 .brow.p1{border-color:var(--o3);box-shadow:var(--shadow)} .brow.p1 .pos{color:var(--o3)}
 .brow img{width:40px;height:40px;border-radius:50%}
@@ -128,7 +128,17 @@ input[type=text],input[type=number],input[type=url]{font:inherit;color:var(--ink
   .opts{grid-template-columns:1fr}
   .clock{font-size:2.6rem}
 }
-@media (prefers-reduced-motion:reduce){.fill,.progress i{transition:none}}
+.winner{display:grid;justify-items:center;text-align:center;gap:6px;margin:8px auto 28px;max-width:640px;position:relative;z-index:2}
+.trophy{font-size:clamp(4.5rem,12vw,7.5rem);line-height:1;animation:pop .9s cubic-bezier(.2,1.6,.4,1) both, bob 2.4s ease-in-out .9s infinite}
+.winner .who{font-family:var(--f-display);font-weight:800;font-size:clamp(2.6rem,7vw,4.8rem);line-height:1;color:var(--accent);text-wrap:balance;animation:rise .6s .35s ease-out both}
+.winner .sub{font-size:1.2rem;color:var(--muted);animation:rise .6s .55s ease-out both}
+.confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:1}
+.confetti i{position:absolute;top:-20px;width:10px;height:16px;border-radius:2px;opacity:.95;animation:fall linear forwards}
+@keyframes pop{0%{transform:scale(0) rotate(-20deg)}100%{transform:scale(1) rotate(0)}}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes fall{to{transform:translateY(110vh) rotate(720deg)}}
+@media (prefers-reduced-motion:reduce){.fill,.progress i{transition:none}.trophy,.winner .who,.winner .sub{animation:none}.confetti{display:none}}
 </style>
 
 </head>
@@ -243,7 +253,7 @@ function payloadFor(pid){
   if (G.phase === "voting" || G.phase === "results") Object.assign(base, {
     roundId:r.id, img:r.img, options:r.options, endsIn: Math.max(0, G.deadline - now()),
     pick: v?.picks?.[r.id] ?? null, answer: G.phase === "results" ? r.answer : null });
-  if (G.phase === "final") base.pts = score(v);
+  if (G.phase === "final"){ base.pts = score(v); const top = Math.max(0, ...players().map(([,x]) => score(x))); base.winner = top > 0 && base.pts === top; }
   return base;
 }
 const imgSent = new Map();  // pid -> roundId whose image the phone already has
@@ -425,10 +435,28 @@ function renderFinal(){
   const sc = players().map(([pid,v]) => ({ pid, name:v.name, pts:score(v) })).sort((a,b) => b.pts - a.pts).slice(0, 10);
   const k = "final|" + sc.map(s => s.pid + s.pts).join(","); if (k === sceneKey) return; sceneKey = k;
   let pos = 0, prev = null;
-  app.innerHTML = `<div style="text-align:center"><p class="eyebrow">Final leaderboard · ${rounds.length} photos</p><h1 class="big">Top baby detectives!</h1></div>
+  const top = sc[0]?.pts || 0, champs = top > 0 ? sc.filter(s => s.pts === top) : [];
+  app.innerHTML = (champs.length ? `<div class="winner"><div class="trophy" aria-hidden="true">🏆</div>
+      <p class="eyebrow">${champs.length > 1 ? "Our winners" : "Our winner"}</p>
+      <div class="who">${champs.map(c => esc(c.name)).join(" & ")}</div>
+      <p class="sub">Congratulations! ${top} of ${rounds.length} babies guessed right.</p></div>`
+    : `<div style="text-align:center"><p class="eyebrow">Final leaderboard · ${rounds.length} photos</p><h1 class="big">Top baby detectives!</h1></div>`) + `
     <div class="board">${sc.map((s,i) => { if (s.pts !== prev){ pos = i+1; prev = s.pts; }
       return `<div class="brow ${pos===1?"p1":""}"><span class="pos">${pos}</span><strong>${esc(s.name)}</strong><span class="pts">${s.pts}/${rounds.length}</span></div>`; }).join("")
       || `<p class="muted" style="text-align:center">No votes yet.</p>`}</div>`;
+  if (champs.length) confetti();
+}
+function confetti(){
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const box = document.createElement("div"); box.className = "confetti";
+  const colors = ["var(--o1)","var(--o2)","var(--o3)","var(--o4)","var(--o6)","#f2c94c"];
+  for (let i = 0; i < 120; i++){
+    const p = document.createElement("i");
+    p.style.left = Math.random()*100 + "vw"; p.style.background = colors[i % colors.length];
+    p.style.animationDuration = (2.8 + Math.random()*2.4) + "s"; p.style.animationDelay = (Math.random()*1.2) + "s";
+    p.style.transform = `rotate(${Math.random()*360}deg)`; box.appendChild(p);
+  }
+  app.appendChild(box); setTimeout(() => box.remove(), 6500);
 }
 
 /* ================================================================== PLAYER */
@@ -488,7 +516,9 @@ function renderPlayer(){
   }
   const p = P.phase;
   if (p === "edit" || p === "lobby") return notice("✅", `You're in, ${P.name}!`, "Watch the shared screen. When the first photo appears, you can vote here.");
-  if (p === "final") return notice("🏆", `You got ${P.pts} of ${P.total} right`, "Check the leaderboard on the shared screen.");
+  if (p === "final") return P.winner
+    ? notice("🏆", `You won, ${P.name}!`, `Congratulations! You guessed ${P.pts} of ${P.total} babies right. Look at the shared screen.`)
+    : notice("👏", `You got ${P.pts} of ${P.total} right`, "Check the leaderboard on the shared screen.");
   const img = lastImg.id === P.roundId ? lastImg.img : "";
   const shell = inner => app.innerHTML = `<div class="phone"><p class="eyebrow" style="text-align:center">Photo ${P.round+1} of ${P.total}</p>
     <div class="baby">${img ? `<img src="${img}" alt="Baby photo">` : ""}</div>${inner}</div>`;
