@@ -108,7 +108,10 @@ input[type=text],input[type=number],input[type=url]{font:inherit;color:var(--ink
 .brow .pos{font-family:var(--f-display);font-weight:800;font-size:1.5rem;color:var(--muted);text-align:center}
 .brow.p1{border-color:var(--o3);box-shadow:var(--shadow)} .brow.p1 .pos{color:var(--o3)}
 .brow img{width:40px;height:40px;border-radius:50%}
-.brow .pts{font-family:var(--f-mono);font-weight:500;font-variant-numeric:tabular-nums}
+.brow .pts{font-family:var(--f-mono);font-weight:500;font-variant-numeric:tabular-nums;display:grid;justify-items:end;line-height:1.2}
+.brow .pts small{font-size:.75rem;color:var(--muted)}
+.fastest{font-weight:700;color:var(--accent);margin:0}
+.rule{text-align:center;color:var(--muted);font-size:.85rem;max-width:640px;margin:14px auto 0}
 
 /* phone */
 .phone{max-width:460px;margin:0 auto;display:grid;gap:16px}
@@ -235,7 +238,8 @@ function onPlayerMsg(conn, msg){
   if (msg.type === "join"){
     const name = String(msg.name || "").trim().slice(0, 30); if (!name) return;
     conns.set(pid, conn);
-    votes[pid] = { name, session:G.session, picks: votes[pid]?.session === G.session ? votes[pid].picks : {} };
+    const same = votes[pid]?.session === G.session;
+    votes[pid] = { name, session:G.session, picks: same ? votes[pid].picks : {}, times: same ? (votes[pid].times || {}) : {} };
     saveAll(); send(pid); render();
   }
   if (msg.type === "vote"){
@@ -243,7 +247,9 @@ function onPlayerMsg(conn, msg){
     if (!v || v.session !== G.session || !r || r.id !== msg.roundId) return;
     if (G.phase !== "voting" || now() > G.deadline + 500) return;
     const j = +msg.pick; if (!(j >= 0 && j < r.options.length)) return;
-    v.picks[r.id] = j; store("gtb.votes", votes); send(pid); render();
+    v.picks[r.id] = j;
+    v.times = v.times || {}; v.times[r.id] = Math.max(0, now() - (G.deadline - G.duration*1000));
+    store("gtb.votes", votes); send(pid); render();
   }
 }
 
@@ -253,7 +259,12 @@ function payloadFor(pid){
   if (G.phase === "voting" || G.phase === "results") Object.assign(base, {
     roundId:r.id, img:r.img, options:r.options, endsIn: Math.max(0, G.deadline - now()),
     pick: v?.picks?.[r.id] ?? null, answer: G.phase === "results" ? r.answer : null });
-  if (G.phase === "final"){ base.pts = score(v); const top = Math.max(0, ...players().map(([,x]) => score(x))); base.winner = top > 0 && base.pts === top; }
+  if (G.phase === "final"){
+    const rk = ranking(), me = rk.findIndex(x => x.pid === pid), first = rk[0];
+    base.pts = score(v); base.ms = speed(v); base.of = rk.length;
+    base.rank = me < 0 ? null : rk.filter(x => x.pts > base.pts || (x.pts === base.pts && x.ms < base.ms)).length + 1;
+    base.winner = !!first && first.pts > 0 && base.pts === first.pts && base.ms === first.ms;
+  }
   return base;
 }
 const imgSent = new Map();  // pid -> roundId whose image the phone already has
@@ -275,6 +286,10 @@ function hostTick(){
 
 const players = () => Object.entries(votes).filter(([,v]) => v.session === G.session);
 const score = v => v ? rounds.reduce((s,r) => s + (r.answer != null && v.picks?.[r.id] === r.answer ? 1 : 0), 0) : 0;
+// Total seconds spent on the photos a player got right (lower is better). Used to break ties on points.
+const speed = v => v ? rounds.reduce((s,r) => s + (r.answer != null && v.picks?.[r.id] === r.answer ? (v.times?.[r.id] ?? G.duration*1000) : 0), 0) : 0;
+const ranking = () => players().map(([pid,v]) => ({ pid, name:v.name, pts:score(v), ms:speed(v) })).sort((a,b) => b.pts - a.pts || a.ms - b.ms);
+const secs = ms => (ms/1000).toFixed(1) + "s";
 const joinUrl = () => location.origin + location.pathname + "?g=" + G.code;
 function setBar(html){ bar.innerHTML = html; bar.hidden = false; }
 const statusDot = () => `<span class="netdot ${peerReady ? "on" : ""}" title="${peerReady ? "Online" : "Connecting…"}"></span>`;
@@ -409,18 +424,20 @@ function renderResults(){
   const last = G.round >= rounds.length - 1;
   setBar(`${statusDot()}<span class="grow">Photo ${G.round+1} of ${rounds.length}</span><button class="btn ghost" id="again">Redo voting</button>
     ${last ? `<button class="btn" id="fin">See final leaderboard →</button>` : `<button class="btn" id="next">Next photo →</button>`}`);
-  bar.querySelector("#again").onclick = () => { players().forEach(([,v]) => delete v.picks[r.id]); startRound(G.round); };
+  bar.querySelector("#again").onclick = () => { players().forEach(([,v]) => { delete v.picks[r.id]; if (v.times) delete v.times[r.id]; }); startRound(G.round); };
   if (last) bar.querySelector("#fin").onclick = () => setG({ phase:"final" }); else bar.querySelector("#next").onclick = () => startRound(G.round + 1);
   const counts = tally(r), total = counts.reduce((a,b) => a+b, 0), max = Math.max(1, ...counts);
   const k = "res|" + r.id + "|" + counts.join(",");
   if (k === sceneKey) return;
   const first = !sceneKey.startsWith("res|" + r.id); sceneKey = k;
   const right = counts[r.answer] || 0;
+  const fast = players().filter(([,v]) => v.picks?.[r.id] === r.answer && v.times?.[r.id] != null).sort((a,b) => a[1].times[r.id] - b[1].times[r.id])[0];
   app.innerHTML = `<div class="stage">
     <div class="baby"><img src="${r.img}" alt="Baby photo"></div>
     <div style="min-width:0;display:grid;gap:20px">
       <div><p class="eyebrow">Results · ${total} ${total===1?"vote":"votes"}</p><p class="reveal">It was <b>${esc(r.options[r.answer])}</b>!</p>
-      <p class="muted">${total ? `${right} of ${total} got it right (${Math.round(100*right/total)}%)` : "Nobody voted this round."}</p></div>
+      <p class="muted">${total ? `${right} of ${total} got it right (${Math.round(100*right/total)}%)` : "Nobody voted this round."}</p>
+      ${fast ? `<p class="fastest">⚡ Fastest: <strong>${esc(fast[1].name)}</strong> · ${secs(fast[1].times[r.id])}</p>` : ""}</div>
       <div class="bars">${r.options.map((o,j) => `<div class="barrow ${j===r.answer?"":"lose"}">
         <div class="name"><span class="letter c${j}" style="color:#fff">${LETTERS[j]}</span>${esc(o)} ${j===r.answer?`<span class="tag">Correct</span>`:""}</div>
         <span class="n">${counts[j]}</span><div class="track"><div class="fill c${j}" data-w="${100*counts[j]/max}"></div></div></div>`).join("")}</div></div></div>`;
@@ -432,18 +449,19 @@ function renderFinal(){
   setBar(`${statusDot()}<button class="btn ghost" id="edit">Back to editor</button><span class="grow"></span><button class="btn" id="restart">Play again</button>`);
   bar.querySelector("#edit").onclick = () => setG({ phase:"edit" });
   bar.querySelector("#restart").onclick = () => setG({ phase:"lobby", round:0, session:"s" + now() });
-  const sc = players().map(([pid,v]) => ({ pid, name:v.name, pts:score(v) })).sort((a,b) => b.pts - a.pts).slice(0, 10);
-  const k = "final|" + sc.map(s => s.pid + s.pts).join(","); if (k === sceneKey) return; sceneKey = k;
+  const sc = ranking().slice(0, 10);
+  const k = "final|" + sc.map(s => s.pid + s.pts + ":" + s.ms).join(","); if (k === sceneKey) return; sceneKey = k;
   let pos = 0, prev = null;
-  const top = sc[0]?.pts || 0, champs = top > 0 ? sc.filter(s => s.pts === top) : [];
+  const lead = sc[0], top = lead?.pts || 0, champs = top > 0 ? sc.filter(s => s.pts === top && s.ms === lead.ms) : [];
   app.innerHTML = (champs.length ? `<div class="winner"><div class="trophy" aria-hidden="true">🏆</div>
       <p class="eyebrow">${champs.length > 1 ? "Our winners" : "Our winner"}</p>
       <div class="who">${champs.map(c => esc(c.name)).join(" & ")}</div>
-      <p class="sub">Congratulations! ${top} of ${rounds.length} babies guessed right.</p></div>`
+      <p class="sub">Congratulations! ${top} of ${rounds.length} babies guessed right, in ${secs(lead.ms)} total.</p></div>`
     : `<div style="text-align:center"><p class="eyebrow">Final leaderboard · ${rounds.length} photos</p><h1 class="big">Top baby detectives!</h1></div>`) + `
-    <div class="board">${sc.map((s,i) => { if (s.pts !== prev){ pos = i+1; prev = s.pts; }
-      return `<div class="brow ${pos===1?"p1":""}"><span class="pos">${pos}</span><strong>${esc(s.name)}</strong><span class="pts">${s.pts}/${rounds.length}</span></div>`; }).join("")
-      || `<p class="muted" style="text-align:center">No votes yet.</p>`}</div>`;
+    <div class="board">${sc.map((s,i) => { const key = s.pts + ":" + s.ms; if (key !== prev){ pos = i+1; prev = key; }
+      return `<div class="brow ${pos===1?"p1":""}"><span class="pos">${pos}</span><strong>${esc(s.name)}</strong><span class="pts">${s.pts}/${rounds.length}<small>${s.pts ? secs(s.ms) : "—"}</small></span></div>`; }).join("")
+      || `<p class="muted" style="text-align:center">No votes yet.</p>`}</div>
+    ${sc.length ? `<p class="rule">Most correct answers wins. Ties go to whoever answered their correct guesses fastest.</p>` : ""}`;
   if (champs.length) confetti();
 }
 function confetti(){
@@ -504,7 +522,7 @@ function renderPlayer(){
     if (app.querySelector("#pname")) return;
     app.innerHTML = `<div class="phone center"><form id="joinform" style="display:grid;gap:16px;width:100%">
       <div class="emoji">🍼</div><p class="eyebrow">All Hands</p><h1 class="big" style="font-size:2.6rem">${esc(P.title)}</h1>
-      <p class="muted">You'll see baby photos of your teammates. Pick who you think it is before time runs out.</p>
+      <p class="muted">You'll see baby photos of your teammates. Pick who you think it is. Be quick: if there's a tie, the fastest correct answers win.</p>
       <label for="pname" style="display:grid;gap:6px;text-align:left;font-weight:800">Your name
         <input type="text" id="pname" maxlength="30" autocomplete="name" placeholder="e.g. Alex R." value="${esc(P.lastName || "")}" style="font-size:1.15rem;padding:.7em .8em"></label>
       <button class="btn" id="join" type="submit" style="font-size:1.2rem;padding:.9em" ${P.lastName ? "" : "disabled"}>Join the game</button></form></div>`;
@@ -517,8 +535,8 @@ function renderPlayer(){
   const p = P.phase;
   if (p === "edit" || p === "lobby") return notice("✅", `You're in, ${P.name}!`, "Watch the shared screen. When the first photo appears, you can vote here.");
   if (p === "final") return P.winner
-    ? notice("🏆", `You won, ${P.name}!`, `Congratulations! You guessed ${P.pts} of ${P.total} babies right. Look at the shared screen.`)
-    : notice("👏", `You got ${P.pts} of ${P.total} right`, "Check the leaderboard on the shared screen.");
+    ? notice("🏆", `You won, ${P.name}!`, `Congratulations! You guessed ${P.pts} of ${P.total} babies right in ${(P.ms/1000).toFixed(1)}s. Look at the shared screen.`)
+    : notice("👏", `You got ${P.pts} of ${P.total} right`, P.rank ? `You finished #${P.rank} of ${P.of}. Check the leaderboard on the shared screen.` : "Check the leaderboard on the shared screen.");
   const img = lastImg.id === P.roundId ? lastImg.img : "";
   const shell = inner => app.innerHTML = `<div class="phone"><p class="eyebrow" style="text-align:center">Photo ${P.round+1} of ${P.total}</p>
     <div class="baby">${img ? `<img src="${img}" alt="Baby photo">` : ""}</div>${inner}</div>`;
